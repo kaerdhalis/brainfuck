@@ -18,9 +18,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <assert.h>
 
 #include <brainfuck.h>
+#include <stdbool.h>
+
+//Boolean used to check if we have a clear loop
+bool loop = false;
+bool minus = false;
 
 /**
  * Creates a new state.
@@ -198,7 +202,7 @@ BrainfuckInstruction * brainfuck_insert_after(BrainfuckState *state, BrainfuckIn
  * @param stream The stream to read from.
  * @param The head of the linked list containing the instructions.
  */
-BrainfuckInstruction * brainfuck_parse_stream(FILE *stream) {
+BrainfuckInstruction * brainfuck_parse_stream(FILE* stream) {
 	return brainfuck_parse_stream_until(stream, EOF);
 }
 
@@ -211,64 +215,69 @@ BrainfuckInstruction * brainfuck_parse_stream(FILE *stream) {
  * @param The head of the linked list containing the instructions.
  */
 BrainfuckInstruction * brainfuck_parse_stream_until(FILE *stream, const int until) {
-	BrainfuckInstruction *instruction = (BrainfuckInstruction *) malloc(sizeof(BrainfuckInstruction));
-	instruction->next = 0;
-	instruction->loop = 0;
-	BrainfuckInstruction *root = instruction;
-	char ch;
-	char temp;
-	while ((ch = fgetc(stream)) != until) {
-		if (ch == EOF || feof(stream)) { break; }
-		instruction->type = ch;
-		instruction->difference = 1;
-		switch(ch) {
-		case BRAINFUCK_TOKEN_PLUS:
-		case BRAINFUCK_TOKEN_MINUS:
-			while ((temp = fgetc(stream)) != until && (temp == BRAINFUCK_TOKEN_PLUS 
-					|| temp == BRAINFUCK_TOKEN_MINUS)) {
-				if (temp == ch) {
-					instruction->difference++;
-				} else {
-					instruction->difference--;
-				}
-			}
-			ungetc(temp, stream);
-			break;
-		case BRAINFUCK_TOKEN_NEXT:
-		case BRAINFUCK_TOKEN_PREVIOUS:
-			while ((temp = fgetc(stream)) != until && (temp == BRAINFUCK_TOKEN_NEXT 
-					|| temp == BRAINFUCK_TOKEN_PREVIOUS)) {
-				if (temp == ch) {
-					instruction->difference++;
-				} else {
-					instruction->difference--;
-				}
-			}
-			ungetc(temp, stream);
-			break;
-		case BRAINFUCK_TOKEN_OUTPUT:
-		case BRAINFUCK_TOKEN_INPUT:
-			while ((temp = fgetc(stream)) != until && temp == ch)
-				instruction->difference++;
-			ungetc(temp, stream);
-			break;
-		case BRAINFUCK_TOKEN_LOOP_START:
-			instruction->loop = brainfuck_parse_stream_until(stream, until);
-			break;
-		case BRAINFUCK_TOKEN_LOOP_END:
-			return root;
-		case BRAINFUCK_TOKEN_BREAK:
-			break;
-		default:
-			continue;
-		}
-		instruction->next = (BrainfuckInstruction *) malloc(sizeof(BrainfuckInstruction));
-		instruction->next->next = 0;
-		instruction->next->loop = 0;
-		instruction = instruction->next;
-	}
-	instruction->type = BRAINFUCK_TOKEN_LOOP_END;
-	return root;
+    BrainfuckInstruction *instruction = (BrainfuckInstruction *) malloc(sizeof(BrainfuckInstruction));
+    instruction->next = 0;
+    instruction->loop = 0;
+    BrainfuckInstruction *root = instruction;
+    char ch;
+    char temp;
+    while ((ch = fgetc(stream)) != until) {
+        if (ch == EOF || feof(stream)) { break; }
+        instruction->type = ch;
+        instruction->difference = 1;
+        switch(ch) {
+            case BRAINFUCK_TOKEN_PLUS:
+            case BRAINFUCK_TOKEN_MINUS:
+                while ((temp = fgetc(stream)) != until && (temp == BRAINFUCK_TOKEN_PLUS
+                                                           || temp == BRAINFUCK_TOKEN_MINUS)) {
+                    if (temp == ch) {
+
+                        instruction->difference++;
+                    } else {
+
+                        instruction->difference--;
+                    }
+                }
+                ungetc(temp, stream);
+                break;
+            case BRAINFUCK_TOKEN_NEXT:
+            case BRAINFUCK_TOKEN_PREVIOUS:
+                while ((temp = fgetc(stream)) != until && (temp == BRAINFUCK_TOKEN_NEXT
+                                                           || temp == BRAINFUCK_TOKEN_PREVIOUS)) {
+                    if (temp == ch) {
+
+                        instruction->difference++;
+                    } else {
+
+                        instruction->difference--;
+                    }
+                }
+                ungetc(temp, stream);
+                break;
+            case BRAINFUCK_TOKEN_OUTPUT:
+            case BRAINFUCK_TOKEN_INPUT:
+                while ((temp = fgetc(stream)) != until && temp == ch)
+                    instruction->difference++;
+                ungetc(temp, stream);
+                break;
+            case BRAINFUCK_TOKEN_LOOP_START:
+
+                instruction->loop = brainfuck_parse_stream_until(stream, until);
+                break;
+            case BRAINFUCK_TOKEN_LOOP_END:
+                return root;
+            case BRAINFUCK_TOKEN_BREAK:
+                break;
+            default:
+                continue;
+        }
+        instruction->next = (BrainfuckInstruction *) malloc(sizeof(BrainfuckInstruction));
+        instruction->next->next = 0;
+        instruction->next->loop = 0;
+        instruction = instruction->next;
+    }
+    instruction->type = BRAINFUCK_TOKEN_LOOP_END;
+    return root;
 }
 
 /**
@@ -325,9 +334,22 @@ BrainfuckInstruction * brainfuck_parse_substring_incremental(char *str, int *ptr
 			switch(c) {
 			case BRAINFUCK_TOKEN_PLUS:
 			case BRAINFUCK_TOKEN_MINUS:
+
+			    //check if token is a minus and is in a loop
+			    if(c==BRAINFUCK_TOKEN_MINUS){
+			        if(loop==true&& minus==false){
+                        minus=true;
+                        loop=false;
+                    }
+                    else if(minus==true){
+                        minus=false;
+                    }}
+
 				(*ptr)++;
 				for (; *ptr < end && (temp_c = str[*ptr]) && 
 						(temp_c == BRAINFUCK_TOKEN_PLUS || temp_c == BRAINFUCK_TOKEN_MINUS); (*ptr)++) {
+				    //if there is multiple tokens in the loop pass to false
+				    minus=false;
 					if (temp_c == c) {
 						instruction->difference++;
 					} else {
@@ -338,6 +360,9 @@ BrainfuckInstruction * brainfuck_parse_substring_incremental(char *str, int *ptr
 				break;
 			case BRAINFUCK_TOKEN_NEXT:
 			case BRAINFUCK_TOKEN_PREVIOUS:
+                if(minus==true){
+                    minus=false;
+                }
 				(*ptr)++;
 				for (; *ptr < end && (temp_c = str[*ptr]) && 
 						(temp_c == BRAINFUCK_TOKEN_NEXT || temp_c == BRAINFUCK_TOKEN_PREVIOUS); (*ptr)++) {
@@ -351,6 +376,9 @@ BrainfuckInstruction * brainfuck_parse_substring_incremental(char *str, int *ptr
 				break;
 			case BRAINFUCK_TOKEN_OUTPUT:
 			case BRAINFUCK_TOKEN_INPUT:
+                if(minus==true){
+                    minus=false;
+                }
 				(*ptr)++;
 				for (; *ptr < end && (str[*ptr] == c); (*ptr)++) {
 					instruction->difference++;
@@ -358,10 +386,20 @@ BrainfuckInstruction * brainfuck_parse_substring_incremental(char *str, int *ptr
 				(*ptr)--;
 				break;
 			case BRAINFUCK_TOKEN_LOOP_START:
+                if(minus==true){
+                    minus=false;
+                }
 				(*ptr)++;
+				loop=true;
 				instruction->loop = brainfuck_parse_substring_incremental(str, ptr, end);
 				break;
 			case BRAINFUCK_TOKEN_LOOP_END:
+
+			    //if minus is the only token of the loop we have a clear loop
+			    if(minus==true){
+                   root->type = BRAINFUCK_TOKEN_ZERO;
+			    }
+			    loop=false;
 				return root;
 			case BRAINFUCK_TOKEN_BREAK:
 				break;
@@ -513,6 +551,12 @@ void brainfuck_execute(BrainfuckInstruction *root, BrainfuckExecutionContext *co
 			}
 			break;
 		case BRAINFUCK_TOKEN_LOOP_START:
+
+		    if(instruction->loop->type==BRAINFUCK_TOKEN_ZERO){
+                context->tape[context->tape_index]=0;
+                break;
+		    }
+
 			while(context->tape[context->tape_index])
 				brainfuck_execute(instruction->loop, context);
 			break;

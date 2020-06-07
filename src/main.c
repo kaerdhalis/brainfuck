@@ -17,10 +17,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
-#include <ctype.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
+#include <unistd.h>
 
 #ifdef BRAINFUCK_EDITLINE_LIB
-	#include <editline/readline.h>
+    #include <editline//readline.h>
+
 #endif
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
@@ -66,27 +70,7 @@ void initialize_readline() {
 }
 #endif
 
-/**
- * Run the given brainfuck file.
- *
- * @param file The brainfuck file to run.
- * @return EXIT_SUCCESS if no errors are encountered, otherwise EXIT_FAILURE.
- */
-int run_file(FILE *file) {
-	BrainfuckState *state = brainfuck_state();
-	BrainfuckExecutionContext *context = brainfuck_context(BRAINFUCK_TAPE_SIZE);
-	if (file == NULL) {
-		brainfuck_destroy_context(context);
-		brainfuck_destroy_state(state);
-		return EXIT_FAILURE;
-	}
-	brainfuck_add(state, brainfuck_parse_stream(file));
-	brainfuck_execute(state->root, context);
-	brainfuck_destroy_context(context);
-	brainfuck_destroy_state(state);
-	fclose(file);
-	return EXIT_SUCCESS;
-}
+
 
 /**
  * Run the given brainfuck string.
@@ -103,6 +87,48 @@ int run_string(char *code) {
 	brainfuck_destroy_context(context);
 	brainfuck_destroy_state(state);
 	return EXIT_SUCCESS;
+}
+
+/**
+ * Run the given brainfuck file.
+ *
+ * @param file The brainfuck file to run.
+ * @return EXIT_SUCCESS if no errors are encountered, otherwise EXIT_FAILURE.
+ */
+int run_file(char *file) {
+
+    int fd = open(file, O_RDONLY);
+    int len = lseek(fd, 0, SEEK_END);
+    char *data = (char*)mmap(0, len, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (data == NULL) {
+        return EXIT_FAILURE;
+    }
+
+    return run_string(data);
+}
+
+/**
+ * Run the given parameters givent by STDIN.
+ *
+ * @param file The brainfuck file to run.
+ * @return EXIT_SUCCESS if no errors are encountered, otherwise EXIT_FAILURE.
+ */
+int run_stdin(FILE *file) {
+
+    if (file == NULL) {
+        return EXIT_FAILURE;
+    }
+
+    int len = fseek (file, 0, SEEK_END);
+
+        char* data = malloc (len);
+        if (data)
+        {
+            fread (data, 1, len, file);
+        }
+        fclose (file);
+
+    return run_string(data);
 }
 
 /**
@@ -133,7 +159,7 @@ void run_interactive_console() {
 			char* expansion;
 			int result;
 
-			result = history_expand(line, &expansion);
+			//result = history_expand(line, &expansion);
 			if (result >= 0 && result != 2 ) { add_history(expansion); }
 			free(expansion);
 		} else {
@@ -205,18 +231,18 @@ int main(int argc, char *argv[]) {
 			abort();
 		}
 	}
-	if (argc > 1) {
-		while (i < argc)
-			if (run_file(fopen(argv[i++], "r")) == EXIT_FAILURE)
-				fprintf(stderr, "error: failed to read file %s\n", argv[i - 1]);
-	} else {
-		/* Check if someone is piping code or just calling it the normal way */
-		if (isatty(STDIN_FILENO)) {
-			run_interactive_console();
-		} else {
-			if (run_file(stdin) == EXIT_FAILURE)
-				fprintf(stderr, "error: failed to read from stdin\n");
-		}
-	}
-	return EXIT_SUCCESS;
+    if (argc > 1) {
+        while (i < argc)
+            if (run_file(argv[i++]) == EXIT_FAILURE)
+                fprintf(stderr, "error: failed to read file %s\n", argv[i - 1]);
+    } else {
+        /* Check if someone is piping code or just calling it the normal way */
+        if (isatty(STDIN_FILENO)) {
+            run_interactive_console();
+        } else {
+            if (run_stdin(stdin) == EXIT_FAILURE)
+                fprintf(stderr, "error: failed to read from stdin\n");
+        }
+    }
+    return EXIT_SUCCESS;
 }
